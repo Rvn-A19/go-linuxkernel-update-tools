@@ -54,7 +54,7 @@ func parseConfigFile(configFile string) map[string]string {
 func main() {
 	httpSource, err := remote.GetHTTPText(remote.KernelsSourceHost)
 	if err != nil {
-		println(err)
+		println(err.Error())
 		return
 	}
 	var ver, link string
