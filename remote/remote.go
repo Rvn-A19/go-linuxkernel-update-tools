@@ -30,25 +30,25 @@ func humanRepr(bytesCount int) string {
 
 // GetHTTPText reads http body from kernelsSourceHost.
 func GetHTTPText(host string) (string, error) {
-	var httpClient http.Client
-	var httpRequest *http.Request
+	var resp *http.Response
 	var err error
-	httpRequest, err = http.NewRequest("GET", host, nil)
+
+	resp, err = http.Get(host)
+
 	if err != nil {
+		println(err.Error())
 		return "", err
 	}
-	var httpResponse *http.Response
-	httpResponse, err = httpClient.Do(httpRequest)
-	if err != nil {
-		return "", err
-	}
-	var bytes []byte
-	bytes, err = ioutil.ReadAll(httpResponse.Body)
+
+	var body []byte
+	body, err = ioutil.ReadAll(resp.Body)
+
 	if err != nil {
 		return "", err
 	}
 
-	return string(bytes), nil
+	return string(body), nil
+
 }
 
 // DownloadFile saves file from remote link.

@@ -1,81 +1,73 @@
 package main
 
 import (
-	"io/ioutil"
-	"strings"
+	"fmt"
+	"os"
+	"os/exec"
+	"path"
 
+	"./kernelorgparser"
+	"./localstorage"
 	"./remote"
 )
 
-func extractVersion(tagline string) string {
-	var result string
-	var tagOpen = "<strong>"
-	var tagClose = "</strong>"
-	posStart := strings.Index(tagline, tagOpen)
-	if posStart != -1 {
-		posStart += len(tagOpen)
-		posEnd := strings.Index(tagline, tagClose)
-		if posEnd != -1 {
-			result = tagline[posStart:posEnd]
-		}
-	}
-	return result
-}
-
-func getArchiveLink(httpText *string, version string) string {
-	posEnd := strings.Index(*httpText, version+".tar.xz")
-	var posStart int
-	for posStart = posEnd; (*httpText)[posStart:posStart+4] != "http"; posStart-- {
-		if posStart == 0 {
-			return ""
-		}
-	}
-	return (*httpText)[posStart : posEnd+len(version)+7]
-}
-
-func parseConfigFile(configFile string) map[string]string {
-	var conf map[string]string
-	bytes, err := ioutil.ReadFile(configFile)
-	if err != nil {
-		println(err.Error())
-		return conf
-	}
-	lines := strings.Split(string(bytes), "\n")
-	var pos int
-	for _, line := range lines {
-		pos = strings.Index(line, "=")
-		if pos != -1 {
-			conf[line[:pos]] = line[pos+1:]
-		}
-	}
-	return conf
-}
-
 func main() {
-	httpSource, err := remote.GetHTTPText(remote.KernelsSourceHost)
+	var err error
+
+	config := localstorage.ParseConfigFile("./default.conf")
+	if len(config) == 0 {
+		fmt.Fprintln(os.Stderr, "No config file.")
+		return
+	}
+
+	var html string
+	html, err = remote.GetHTTPText(remote.KernelsSourceHost)
 	if err != nil {
 		println(err.Error())
 		return
 	}
-	var ver, link string
-	lines := strings.Split(httpSource, "\n")
-	for idx, line := range lines {
-		if strings.Index(line, "stable:") != -1 {
-			ver = extractVersion(lines[idx+1])
-			link = getArchiveLink(&httpSource, ver)
-			println(ver, link)
-			break
+	var kInfo = kernelorgparser.GetInformation(&html)
+	var isUpdate bool
+	isUpdate, err = localstorage.ShouldUpdate(kInfo.Version, config["kernels_dir"])
+	if err != nil {
+		println(err.Error())
+		return
+	}
+	if isUpdate {
+		var cwd string
+		cwd, err = os.Getwd()
+		println("New kernel source available")
+		if err = os.Chdir(config["kernels_dir"]); err != nil {
+			println(err.Error())
+			return
 		}
-	}
-	if len(link) > 0 {
-		//filename := link[strings.LastIndex(link, "/")+1 : len(link)]
-		//remote.DownloadFile(link, filename)
-		remote.DownloadFile("https://www.farmanager.com/files/Far30b5454.x86.20190823.msi", "FarManager.msi")
-	}
-	config := parseConfigFile("./default.conf")
-	configPath, exists := config["config_path"]
-	if exists {
-		println(configPath)
+		if err = os.Mkdir(kInfo.Version, 0660); err != nil {
+			println(err.Error())
+			return
+		}
+		if err = os.Chdir(kInfo.Version); err != nil {
+			println(err.Error())
+			return
+		}
+		var filename = path.Base(kInfo.ArchiveLink)
+		remote.DownloadFile(kInfo.ArchiveLink, filename)
+		// We're done - run post-get scripts :
+		// E.g. (/path/to/script.sh <version> </path/to/kernel_config> <path to downloaded archive>).
+		var postGetScripts, exist = config["post_get_scripts"]
+		if exist {
+			println("Executing", postGetScripts)
+			var path, _ = os.Getwd()
+			var bashRun = exec.Command("bash", postGetScripts, kInfo.Version, config["config_path"], path)
+			var binOut []byte
+			binOut, err = bashRun.Output()
+			if err != nil {
+				println(err.Error())
+			} else {
+				println(string(binOut))
+			}
+		}
+		os.Chdir(cwd)
+	} else {
+		println("You have latest sources")
 	}
 }
-
