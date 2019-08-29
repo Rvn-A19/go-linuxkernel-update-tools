@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // DefaultConfigName contains default path to config for update tool.
@@ -58,6 +59,50 @@ func CompareVersions(v1 string, v2 string) (int, error) {
 		}
 	}
 	return 0, nil
+}
+
+func isValidKernelNumber(str string) bool {
+	chunks := strings.Split(str, ".")
+	if len(chunks) != 3 {
+		return false
+	}
+	for _, chunk := range chunks {
+		for _, char := range chunk {
+			if !unicode.IsNumber(char) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// GetLatestLocalVersion returns latest dir from kernels sources dir, or empty string if no such entry.
+func GetLatestLocalVersion(kernelDir string) string {
+	var err error
+	var fi []os.FileInfo
+	fi, err = ioutil.ReadDir(kernelDir)
+	if err != nil {
+		return ""
+	}
+	var maxVer = ""
+	var flag int
+	var i = 0
+	for ; i < len(fi); i++ {
+		if isValidKernelNumber(fi[i].Name()) {
+			maxVer = fi[i].Name()
+			break
+		}
+	}
+	if maxVer != "" {
+		i++
+		for ; i < len(fi); i++ {
+			flag, err = CompareVersions(fi[i].Name(), maxVer)
+			if err == nil && flag == 1 {
+				maxVer = fi[i].Name()
+			}
+		}
+	}
+	return maxVer
 }
 
 // ShouldUpdate checks if new version should be downloaded.

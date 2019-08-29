@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"syscall"
 
 	"./kernelorgparser"
 	"./localstorage"
@@ -30,18 +31,20 @@ func main() {
 	var isUpdate bool
 	isUpdate, err = localstorage.ShouldUpdate(kInfo.Version, config["kernels_dir"])
 	if err != nil {
+		println("Incorrect directory format: it should contain at least one kernel source dir, or be empty")
 		println(err.Error())
 		return
 	}
 	if isUpdate {
 		var cwd string
 		cwd, err = os.Getwd()
+		var latestLocalVersion = localstorage.GetLatestLocalVersion(config["kernels_dir"])
 		println("New kernel source available")
 		if err = os.Chdir(config["kernels_dir"]); err != nil {
 			println(err.Error())
 			return
 		}
-		if err = os.Mkdir(kInfo.Version, 0660); err != nil {
+		if err = os.Mkdir(kInfo.Version, 0755); err != nil {
 			println(err.Error())
 			return
 		}
@@ -52,18 +55,30 @@ func main() {
 		var filename = path.Base(kInfo.ArchiveLink)
 		remote.DownloadFile(kInfo.ArchiveLink, filename)
 		// We're done - run post-get scripts :
-		// E.g. (/path/to/script.sh <version> </path/to/kernel_config> <path to downloaded archive>).
+		// E.g. (/path/to/script.sh <local old version> </path/to/kernel_config> <path to downloaded archive>).
 		var postGetScripts, exist = config["post_get_scripts"]
 		if exist {
 			println("Executing", postGetScripts)
-			var path, _ = os.Getwd()
-			var bashRun = exec.Command("bash", postGetScripts, kInfo.Version, config["config_path"], path)
-			var binOut []byte
-			binOut, err = bashRun.Output()
+			var binary string
+			binary, err = exec.LookPath("bash")
 			if err != nil {
 				println(err.Error())
-			} else {
-				println(string(binOut))
+				return
+			}
+
+			var curPath string
+			curPath, err = os.Getwd()
+			if err != nil {
+				println(err.Error())
+				return
+			}
+
+			var args = []string{binary, postGetScripts, curPath, config["config_path"], latestLocalVersion}
+			var env = os.Environ()
+
+			err = syscall.Exec(binary, args, env)
+			if err != nil {
+				println(err.Error())
 			}
 		}
 		os.Chdir(cwd)
