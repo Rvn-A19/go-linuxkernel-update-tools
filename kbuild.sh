@@ -1,9 +1,9 @@
 #!/bin/bash
 
-config_file="$1"
-kernels_dir="$2"
+config_file="$2"
+kernels_dir="$1"
 last_local_version="$3"
-
+echo -e "Config file: $config_file\nKernels dir: $kernels_dir\nLast Local Version: $last_local_version"
 if [ ! "$config_file" ]; then
   echo "No path to config file"
   exit 3
@@ -16,7 +16,8 @@ fi
 
 cd "$kernels_dir"
 ver="`basename $(pwd)`"
-tar xvf linux-$ver.tar.xz
+tar xf linux-$ver.tar.xz
 cd linux-$ver
-cp $config_file . -v
-make -j6
+cp $config_file ./.config -v
+let threads=`cat /proc/cpuinfo | grep processor | wc -l`+1
+make -j$threads
