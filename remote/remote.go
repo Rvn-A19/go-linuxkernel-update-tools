@@ -76,7 +76,18 @@ func DownloadFile(link string, filename string) error {
 		println(err.Error())
 		return err
 	}
-	resp, err = http.Get(link)
+
+	client := &http.Client{}
+
+	var req *http.Request
+	req, err = http.NewRequest("GET", link, nil)
+	if err != nil {
+		print(err.Error())
+		return err
+	}
+
+	req.Header.Add("Connection", "Close")
+	resp, err = client.Do(req)
 	if err != nil {
 		println(err.Error())
 		return err
@@ -86,6 +97,7 @@ func DownloadFile(link string, filename string) error {
 	if contentLength < MB4 {
 		println("saving", contentLength, "bytes to", filename)
 		var bytes []byte
+		defer resp.Body.Close()
 		bytes, err = ioutil.ReadAll(resp.Body)
 		if err != nil {
 			println(err.Error())
@@ -107,6 +119,7 @@ func DownloadFile(link string, filename string) error {
 	var n int
 	var total = 0
 	var spaces = "               "
+	defer resp.Body.Close()
 	for {
 		n, err = io.ReadFull(resp.Body, buf)
 		f.Write(buf[:n])
