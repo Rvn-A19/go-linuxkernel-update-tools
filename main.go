@@ -43,6 +43,12 @@ func main() {
 	cwd, err = os.Getwd()
 	var latestLocalVersion = localstorage.GetLatestLocalVersion(config["kernels_dir"])
 	println("New kernel source available")
+  if (len(os.Args) > 1) {
+    if (os.Args[1] == "check") {
+      println("New version is ", kInfo.Version)
+      return
+    }
+  }
 	if err = os.Chdir(config["kernels_dir"]); err != nil {
 		println(err.Error())
 		return
